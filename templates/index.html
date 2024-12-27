@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Voice Assistant</title>
+    <style>
+      body {
+        font-family: "Roboto", Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        color: #fff;
+      }
+
+      .container {
+        background: linear-gradient(145deg, #ffffff, #f1f1f1);
+        border-radius: 15px;
+        padding: 30px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        max-width: 700px;
+        width: 100%;
+        text-align: center;
+      }
+
+      h1 {
+        margin-bottom: 20px;
+        font-size: 2.2rem;
+        color: #1e3c72;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 100px;
+        margin-bottom: 15px;
+        padding: 15px;
+        border: none;
+        border-radius: 10px;
+        font-size: 1rem;
+        background: #f9f9f9;
+        box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.1);
+        resize: vertical;
+      }
+
+      textarea:focus {
+        outline: none;
+        box-shadow: 0 0 5px #2a5298;
+      }
+
+      .button-group {
+        display: flex;
+        justify-content: space-between;
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+
+      button {
+        flex: 1;
+        padding: 12px 20px;
+        background: linear-gradient(90deg, #36d1dc, #5b86e5);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease-in-out;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      }
+
+      button:hover {
+        background: linear-gradient(90deg, #5b86e5, #36d1dc);
+        transform: scale(1.05);
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
+      }
+
+      .output-section {
+        margin-top: 20px;
+      }
+
+      .highlighted-response {
+        padding: 15px;
+        background: linear-gradient(135deg, #f0faff, #e8f0fe);
+        border-radius: 10px;
+        box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.1);
+        color: #333;
+        font-size: 1rem;
+        line-height: 1.6;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+
+      .highlighted-response .word {
+        transition: background-color 0.3s ease;
+        padding: 2px 4px;
+        border-radius: 3px;
+      }
+
+      .highlighted-response .word.highlight {
+        background-color: #ffeb3b;
+        font-weight: bold;
+      }
+
+      @media (max-width: 768px) {
+        h1 {
+          font-size: 1.8rem;
+        }
+
+        button {
+          font-size: 0.9rem;
+          padding: 10px;
+        }
+
+        textarea {
+          font-size: 0.9rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>AI Voice Assistant</h1>
+      <div class="input-section">
+        <textarea
+          id="input-text"
+          placeholder="Type your message or use voice input"
+        ></textarea>
+        <div class="button-group">
+          <button id="record-btn">🎙️ Record</button>
+          <button id="submit-btn">Send</button>
+          <button id="reset-btn">🔄 Reset</button>
+        </div>
+      </div>
+      <div class="output-section">
+        <textarea
+          id="output-text"
+          readonly
+          placeholder="AI Response"
+        ></textarea>
+      </div>
+    </div>
+    <script>
+      // Modified JavaScript code - replace the existing script section in your index.html
+
+      let mediaRecorder;
+      let audioChunks = [];
+      let isRecording = false;
+
+      // Get DOM elements
+      const recordButton = document.getElementById("record-btn");
+      const submitButton = document.getElementById("submit-btn");
+      const resetButton = document.getElementById("reset-btn");
+      const inputText = document.getElementById("input-text");
+      const outputText = document.getElementById("output-text");
+
+      // Audio Recording functionality
+      recordButton.addEventListener("click", async () => {
+        if (!isRecording) {
+          try {
+            // Request microphone access with specific constraints
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                channelCount: 1,
+                sampleRate: 16000,
+              },
+            });
+
+            mediaRecorder = new MediaRecorder(stream, {
+              mimeType: "audio/webm;codecs=opus",
+            });
+            audioChunks = [];
+
+            // Collect audio data
+            mediaRecorder.ondataavailable = (event) => {
+              if (event.data.size > 0) {
+                audioChunks.push(event.data);
+              }
+            };
+
+            // Handle recording stop
+            mediaRecorder.onstop = async () => {
+              // Convert audio chunks to blob
+              const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+
+              // Convert to wav format
+              const wavBlob = await convertToWav(audioBlob);
+              await transcribeAudio(wavBlob);
+
+              // Stop all tracks
+              stream.getTracks().forEach((track) => track.stop());
+            };
+
+            // Start recording
+            mediaRecorder.start(100); // Collect data every 100ms
+            isRecording = true;
+            recordButton.textContent = "⏹️ Stop Recording";
+            recordButton.style.background =
+              "linear-gradient(90deg, #ff4b4b, #ff6b6b)";
+
+            // Add recording indicator
+            inputText.placeholder = "Recording... Speak now";
+          } catch (err) {
+            console.error("Error accessing microphone:", err);
+            alert("Error accessing microphone. Please check permissions.");
+          }
+        } else {
+          // Stop recording
+          if (mediaRecorder && mediaRecorder.state !== "inactive") {
+            mediaRecorder.stop();
+            isRecording = false;
+            recordButton.textContent = "🎙️ Record";
+            recordButton.style.background =
+              "linear-gradient(90deg, #36d1dc, #5b86e5)";
+            inputText.placeholder = "Type your message or use voice input";
+          }
+        }
+      });
+
+      // Convert blob to WAV format
+      async function convertToWav(blob) {
+        const audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)();
+        const arrayBuffer = await blob.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        // Create WAV file
+        const numberOfChannels = audioBuffer.numberOfChannels;
+        const length = audioBuffer.length * numberOfChannels;
+        const sampleRate = audioBuffer.sampleRate;
+        const wavBuffer = new ArrayBuffer(44 + length * 2);
+        const view = new DataView(wavBuffer);
+
+        // WAV Header
+        writeString(view, 0, "RIFF");
+        view.setUint32(4, 36 + length * 2, true);
+        writeString(view, 8, "WAVE");
+        writeString(view, 12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, numberOfChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * numberOfChannels * 2, true);
+        view.setUint16(32, numberOfChannels * 2, true);
+        view.setUint16(34, 16, true);
+        writeString(view, 36, "data");
+        view.setUint32(40, length * 2, true);
+
+        // Write audio data
+        const offset = 44;
+        const channelData = audioBuffer.getChannelData(0);
+        for (let i = 0; i < channelData.length; i++) {
+          const sample = Math.max(-1, Math.min(1, channelData[i]));
+          view.setInt16(
+            offset + i * 2,
+            sample < 0 ? sample * 0x8000 : sample * 0x7fff,
+            true
+          );
+        }
+
+        return new Blob([wavBuffer], { type: "audio/wav" });
+      }
+
+      // Helper function to write strings to DataView
+      function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+        }
+      }
+
+      // Transcribe audio to text
+      async function transcribeAudio(audioBlob) {
+        const formData = new FormData();
+        formData.append("audio", audioBlob, "recording.wav");
+
+        try {
+          inputText.value = "Transcribing...";
+
+          const response = await fetch("/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await response.json();
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          // Display transcribed text in input area
+          inputText.value = data.transcription;
+        } catch (err) {
+          console.error("Error transcribing audio:", err);
+          alert("Error transcribing audio. Please try again.");
+          inputText.value = "";
+        }
+      }
+
+      // Generate AI response
+      submitButton.addEventListener("click", async () => {
+        const text = inputText.value.trim();
+        if (!text) {
+          alert("Please enter some text or record audio first");
+          return;
+        }
+
+        try {
+          // Show loading state
+          submitButton.disabled = true;
+          submitButton.textContent = "Processing...";
+          outputText.value = "Generating response...";
+
+          const response = await fetch("/generate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ text }),
+          });
+
+          const data = await response.json();
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          // Display AI response
+          outputText.value = data.text;
+
+          // Play audio response if available
+          if (data.audio_url) {
+            const audio = new Audio(data.audio_url);
+            await audio.play().catch(console.error);
+          }
+        } catch (err) {
+          console.error("Error generating response:", err);
+          alert("Error generating response. Please try again.");
+          outputText.value = "Error generating response. Please try again.";
+        } finally {
+          // Reset button state
+          submitButton.disabled = false;
+          submitButton.textContent = "Send";
+        }
+      });
+
+      // Reset conversation
+      resetButton.addEventListener("click", async () => {
+        try {
+          await fetch("/reset", { method: "POST" });
+          inputText.value = "";
+          outputText.value = "";
+          inputText.placeholder = "Type your message or use voice input";
+          // Restart conversation by simulating a new input
+          inputText.dispatchEvent(new Event("input"));
+        } catch (err) {
+          console.error("Error resetting conversation:", err);
+          alert("Error resetting conversation. Please try again.");
+        }
+      });
+    </script>
+  </body>
+</html>
